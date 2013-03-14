@@ -1,4 +1,4 @@
-Dependency injector, assembles application from components.
+Dependency injector, assembles application.
 
 Registering and getting components.
 
@@ -19,10 +19,10 @@ directory.
 Provide `watch` option to reload on change.
 
 ``` CoffeeScript
-app.autoloadComponents directoryPath, watch: true
+app.autoload directoryPath, watch: true
 ```
 
-Scopes, rely on node-fibers.
+Custom scopes.
 
 ``` CoffeeScript
 app.register 'session', scope: 'request', -> {}
