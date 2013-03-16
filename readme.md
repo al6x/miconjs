@@ -95,6 +95,10 @@ startFiberSomehow ->
   # => after
 ```
 
-Note: fiber and custom scopes will not work in browser because browsers doesn't support fibers.
+Limitations.
+
+- Fiber and custom scopes will not work in browser because browsers doesn't support fibers.
+- Use `app.get componentName` instead of `app.componentName` in old browsers not supporting
+getters and setters syntax. Use `set` for setting components.
 
 Copyright (c) Alexey Petrushin, http://petrush.in, released under the MIT license.

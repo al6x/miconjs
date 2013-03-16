@@ -1,4 +1,5 @@
-# Allowing limited functionality when fibers not available.
+# Fiber required for `fiber` and custom scopes, allowing to fall back and use limited
+# functionality when fibers not available.
 try
   Fiber = require 'fibers'
 catch err
@@ -10,8 +11,10 @@ isFunction = (o) -> typeof(o) == 'function'
 Micon  = -> @initialize.apply(@, arguments); @
 mproto = Micon.prototype
 
+# Initialization.
 mproto.initialize = -> @clear()
 
+# Creates scope, provided `callback` will be executed within that scope.
 mproto.scope = (scopeName, container..., callback) ->
   container = container[0] || {}
 
@@ -34,6 +37,7 @@ mproto.scope = (scopeName, container..., callback) ->
     delete fiber.activeScopes[scopeName]
   container
 
+# Check if scope created.
 mproto.hasScope = (scopeName) ->
   switch scopeName
     when 'instance' then true
@@ -43,6 +47,7 @@ mproto.hasScope = (scopeName) ->
       if activeScopes = Fiber.current?.activeScopes then scopeName of activeScopes
       else false
 
+# Clear everything.
 mproto.clear = ->
   [@registry, @initializers] = [{}, {}]
   @staticComponents = {}
@@ -50,6 +55,7 @@ mproto.clear = ->
   [@beforeScopeCallbacks, @afterScopeCallbacks] = [[], []]
   @activeInitializations = {}
 
+# Check if component instantiated.
 mproto.has = (componentName) ->
   return false unless scopeName = @registry[componentName]
 
@@ -65,22 +71,23 @@ mproto.has = (componentName) ->
         componentName of container
       else false
 
+# Get component.
 mproto.get = (componentName) ->
   unless scopeName = @registry[componentName]
     throw new Error "component '#{componentName}' not registered!"
 
   switch scopeName
-    when 'instance' then @createComponent componentName
+    when 'instance' then @_createComponent componentName
     when 'static'
       if component = @staticComponents[componentName] then component
-      else @createComponent(componentName, @staticComponents)
+      else @_createComponent(componentName, @staticComponents)
     when 'fiber'
       # Fiber scope.
       unless fiber = Fiber.current
         throw new Error "can't get component '#{componentName}', no active fiber!"
       fiberComponents = (fiber.fiberComponents ?= {})
       if component = fiberComponents[componentName] then component
-      else @createComponent(componentName, fiberComponents)
+      else @_createComponent(componentName, fiberComponents)
     else
       # Custom scope.
       unless fiber = Fiber.current
@@ -89,8 +96,9 @@ mproto.get = (componentName) ->
         throw new Error "can't get component '#{componentName}', scope '#{scopeName}' not created!"
 
       if component = container[componentName] then component
-      else @createComponent(componentName, container)
+      else @_createComponent(componentName, container)
 
+# Set component.
 mproto.set = (componentName, component) ->
   unless scopeName = @registry[componentName]
     throw new Error "component '#{componentName}' not registered!"
@@ -121,6 +129,7 @@ mproto.set = (componentName, component) ->
       @_runAfterCallbacks componentName
       component
 
+# Register component.
 mproto.register = (componentName, args...) ->
   throw new Error "can't use '#{componentName}' as component name!" unless componentName
   initializer = args.pop() if args.length > 0 and isFunction(args[args.length - 1])
@@ -128,25 +137,35 @@ mproto.register = (componentName, args...) ->
 
   @registry[componentName]     = options.scope || 'static'
   @initializers[componentName] = [initializer, options.dependencies]
+
+  # Injecting component so it will be available as property.
   @inject componentName, Micon
 
+# Check if component registered.
+mproto.isRegistered = (componentName) -> componentName of @registry
+
+# Callback triggered before component initialized.
 mproto.before = (componentName, callback) ->
   throw new Error "component '#{componentName}' already created!" if @has componentName
   (@beforeCallbacks[componentName] ?= []).push callback
 
+# Callback triggered after component initialized.
 mproto.after = (componentName, callback) ->
   throw new Error "component '#{componentName}' already created!" if @has componentName
   (@afterCallbacks[componentName] ?= []).push callback
 
+# Callback triggered before scope created.
 mproto.beforeScope = (scopeName, callback) ->
   throw new Error "scope '#{scopeName}' already created!" if @hasScope scopeName
   (@beforeScopeCallbacks[scopeName] ?= []).push callback
 
+# Callback triggered after scope created.
 mproto.afterScope = (scopeName, callback) ->
   throw new Error "scope '#{scopeName}' already created!" if @hasScope scopeName
   (@afterScopeCallbacks[scopeName] ?= []).push callback
 
-mproto.createComponent = (componentName, container) ->
+# Creates component.
+mproto._createComponent = (componentName, container) ->
   [initializer, dependencies] = @initializers[componentName]
 
   unless initializer
@@ -182,6 +201,7 @@ mproto.createComponent = (componentName, container) ->
   @_runAfterCallbacks componentName
   component
 
+# Inject component as a property into object.
 mproto.inject = (componentName, klass) ->
   Object.defineProperty klass.prototype, componentName,
     set          : (component) -> app.set componentName, component
@@ -194,4 +214,5 @@ mproto._runAfterCallbacks = (componentName) ->
 mproto._runBeforeCallbacks = (componentName) ->
   fn() for fn in list if list = @beforeCallbacks[componentName]
 
-module.exports = new Micon()
+# Setting global `app` variable.
+(global || window).app = new Micon()
