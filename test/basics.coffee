@@ -1,5 +1,17 @@
 require './helper'
 
+describe "Dependency Injector", ->
+  it "should allow to express dependencies explicitly", ->
+    events = []
+    app.register 'a', ->
+      events.push 'a'
+      'a'
+    app.register 'b', dependencies: ['a'], ->
+      events.push 'b'
+      'b'
+    app.b
+    expect(events).to.eql ['a', 'b']
+
 describe "Instance scope", ->
   it "should register and get component", ->
     app.register 'component', scope: 'instance', -> ['some component']
@@ -19,24 +31,43 @@ describe "Static scope", ->
     app.component = 'another component'
     expect(app.component).to.eql 'another component'
 
+describe "Fiber scope", ->
+  it "should activate scope", ->
+    expect(app.hasScope('fiber')).to.eql false
+    activateFiber ->
+      expect(app.hasScope('fiber')).to.eql true
+    expect(app.hasScope('fiber')).to.eql false
+
+  it "should register and get component", ->
+    app.register 'component', scope: 'fiber', -> 'some component'
+    activateFiber ->
+      expect(app.component).to.eql 'some component'
+
+  it "should set component", ->
+    app.register 'component', scope: 'fiber', -> 'some component'
+    activateFiber ->
+      expect(app.component).to.eql 'some component'
+      app.component = 'another component'
+      expect(app.component).to.eql 'another component'
+
 describe "Custom scope", ->
   it "should activate scope", ->
-    expect(app.isActive('custom')).to.eql false
+    expect(app.hasScope('custom')).to.eql false
     activateFiber ->
-      app.activate 'custom', ->
-        expect(app.isActive('custom')).to.eql true
-    expect(app.isActive('custom')).to.eql false
+      app.scope 'custom', ->
+        expect(app.hasScope('custom')).to.eql true
+    expect(app.hasScope('custom')).to.eql false
 
   it "should register and get component", ->
     app.register 'component', scope: 'custom', -> 'some component'
     activateFiber ->
-      app.activate 'custom', ->
+      app.scope 'custom', ->
         expect(app.component).to.eql 'some component'
 
   it "should set component", ->
     app.register 'component', scope: 'custom', -> 'some component'
     activateFiber ->
-      app.activate 'custom', ->
+      app.scope 'custom', ->
         expect(app.component).to.eql 'some component'
         app.component = 'another component'
         expect(app.component).to.eql 'another component'
@@ -52,6 +83,7 @@ describe "Component callbacks", ->
       expect(app.component).to.eql 'some component'
       events.push 'after'
 
+    app.component
     expect(events).to.eql ['before', 'after']
 
 describe "Scope callbacks", ->
@@ -60,5 +92,5 @@ describe "Scope callbacks", ->
     app.beforeScope 'custom', -> events.push 'before'
     app.afterScope 'custom', -> events.push 'after'
     activateFiber ->
-      app.activate 'custom', ->
+      app.scope 'custom', ->
     expect(events).to.eql ['before', 'after']

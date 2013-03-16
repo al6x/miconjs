@@ -3,21 +3,21 @@ require './helper'
 shared = (scope) ->
   it "should not allow to return null in component initializer", ->
     activateFiber ->
-      app.activate scope, ->
+      app.scope scope, ->
         app.register 'component', scope: scope, -> null
-        expect(-> app.component).should.throw /return null/
+        expect(-> app.component).to.throw /return null/
 
   it "should register component without initializer but not create it", ->
     activateFiber ->
-      app.activate scope, ->
-        app.register 'component', scope: scope,
+      app.scope scope, ->
+        app.register 'component', scope: scope
         expect(-> app.component).to.throw /no initializer/
 
   it "should not allow to set null as component", ->
     activateFiber ->
-      app.activate scope, ->
+      app.scope scope, ->
         app.register 'component', scope: scope
-        expect(-> app.component).to.throw /can't set null/
+        expect(-> app.component = null).to.throw /can't set .* component/
 
 describe "Instance scope", ->
   shared 'instance'
@@ -30,13 +30,24 @@ describe "Custom scope", ->
 
   it "should not ativate scope twice", ->
     activateFiber ->
-      app.activate 'custom', {}, ->
-        expect(-> app.activate 'custom').to.throw /already active/
+      app.scope 'custom', {}, ->
+        expect(-> app.scope 'custom').to.throw /already active/
 
   it "shoud not get or set component if scope isn't active", ->
     app.register 'component', scope: 'custom', -> 'some component'
-    expect(-> app.component).to.throw /scope.*not started/
-    expect(-> app.component = 'other component').to.throw /scope.*not started/
+    activateFiber ->
+      expect(-> app.component).to.throw /scope.*not created/
+      expect(-> app.component = 'other component').to.throw /scope.*not created/
+
+  it "should not activate scope without active fiber"
+
+describe "Fiber scope", ->
+  shared 'fiber'
+
+  it "shoud not get or set component if scope isn't active", ->
+    app.register 'component', scope: 'fiber', -> 'some component'
+    expect(-> app.component).to.throw /no active fiber/
+    expect(-> app.component = 'other component').to.throw /no active fiber/
 
   it "should not activate scope without active fiber"
 
@@ -62,13 +73,18 @@ describe "Custom scope", ->
   #   expect(container.component).to.eql 'another component'
 
 describe "Circullar dependencies", ->
-  it "should not initialize twice", ->
+  it  "should not allow circular dependency for single component", ->
     app.register 'component', ->
       app.component
       'component'
-    expect(-> app.kit).to.throw /component .* used before its initialization finished/
+    expect(-> app.component).to.throw /component .* used before its initialization finished/
 
-  it "should not initialize twice if called from dependency", ->
+  it "should allow to use circullar dependency in after callback for singel component", ->
+    app.register 'component', -> {name: 'component'}
+    app.after 'component', -> app.component.altered = true
+    expect(app.component).to.eql {name: 'component', altered: true}
+
+  it "should not allow circular dependency for multiple components", ->
     app.register 'environment', ->
       app.router
       'environment'
@@ -79,19 +95,16 @@ describe "Circullar dependencies", ->
 
     expect(-> app.router).to.throw /component .* used before its initialization finished/
 
-  it "should allow to use circullar dependency in after callback", ->
+  it "should allow circullar dependency in after callback for multiple components", ->
     app.register 'environment', -> 'environment'
-    app.after 'environment', ->
-      app.router
+    app.after 'environment', -> app.router
 
-    app.register 'router', ->
-      app.environment
-      'router'
+    app.register 'router', dependencies: ['environment'], -> 'router'
 
     app.router
 
 describe "Component callbacks", ->
-  it "should fire callbacks when manually setting component", ->
+  it "should fire after callbacks when manually setting component", ->
     app.register 'component'
     events = []
     app.before 'component', -> events.push 'before'
@@ -100,9 +113,9 @@ describe "Component callbacks", ->
       events.push 'after'
 
     app.component = 'some component'
-    expect(events).to.eql ['before', 'after']
+    expect(events).to.eql ['after']
 
-  it "should raise error if callback defined after component already created" do
+  it "should raise error if callback defined after component already created", ->
     app.register 'component', -> 'some component'
     app.component
 
@@ -121,8 +134,8 @@ describe "Component callbacks", ->
   #   app[:the_component]
 
 describe "Scope callbacks", ->
-  it "should raise error if callback defined after scope already started" do
+  it "should raise error if callback defined after scope already started", ->
     activateFiber ->
-      app.activate 'custom', ->
-        expect(-> app.beforeScope 'custom').to.throw /already started/
-        expect(-> app.afterScope 'custom').to.throw /already started/
+      app.scope 'custom', ->
+        expect(-> app.beforeScope 'custom').to.throw /already created/
+        expect(-> app.afterScope 'custom').to.throw /already created/

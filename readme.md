@@ -12,6 +12,40 @@ console.log app.component
 # => another component
 ```
 
+Dependencies can be specified implicitly.
+
+``` CoffeeScript
+app.register 'a', ->
+  console.log 'initializing a'
+  'a'
+app.register 'b', ->
+  console.log 'initializing b'
+  "#{app.a} b"
+
+console.log app.b
+# => initializing b
+# => initializing a
+# => a b
+```
+
+Dependencies can be specified explicitly. The only difference with implicit approach
+is that explicit declaration will resolve circular dependencies (implicit approach
+will fail).
+
+``` CoffeeScript
+app.register 'a', ->
+  console.log 'initializing a'
+  'a'
+app.register 'b', dependencies: ['a'], ->
+  console.log 'initializing b'
+  "#{app.a} b"
+
+console.log app.b
+# => initializing a
+# => initializing b
+# => a b
+```
+
 Component lifecycle callbacks.
 
 ``` CoffeeScript
@@ -43,7 +77,7 @@ Scopes.
 app.register 'params', scope: 'request', -> {}
 
 startFiberSomehow ->
-  app.activate 'request', ->
+  app.scope 'request', ->
     app.params.key = 'some value'
     console.log app.params
     # => {key: 'some value'}
@@ -56,9 +90,11 @@ app.beforeScope 'request', -> console.log 'before'
 app.afterScope 'request', -> console.log 'after'
 
 startFiberSomehow ->
-  app.activate 'request', ->
+  app.scope 'request', ->
   # => before
   # => after
 ```
+
+Note: fiber and custom scopes will not work in browser because browsers doesn't support fibers.
 
 Copyright (c) Alexey Petrushin, http://petrush.in, released under the MIT license.
