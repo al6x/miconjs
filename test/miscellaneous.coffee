@@ -79,7 +79,7 @@ describe "Circullar dependencies", ->
       'component'
     expect(-> app.component).to.throw /component .* used before its initialization finished/
 
-  it "should allow to use circullar dependency in after callback for singel component", ->
+  it "should allow to use circullar dependency in after callback for single component", ->
     app.register 'component', -> {name: 'component'}
     app.after 'component', -> app.component.altered = true
     expect(app.component).to.eql {name: 'component', altered: true}

@@ -7,7 +7,7 @@ catch err
 # Helpers.
 isFunction = (o) -> typeof(o) == 'function'
 
-# Micon, dependency injector.
+# # Micon, dependency injector.
 Micon  = -> @initialize.apply(@, arguments); @
 mproto = Micon.prototype
 
@@ -139,7 +139,7 @@ mproto.register = (componentName, args...) ->
   @initializers[componentName] = [initializer, options.dependencies]
 
   # Injecting component so it will be available as property.
-  @inject componentName, Micon
+  @inject Micon, componentName
 
 # Check if component registered.
 mproto.isRegistered = (componentName) -> componentName of @registry
@@ -202,10 +202,10 @@ mproto._createComponent = (componentName, container) ->
   component
 
 # Inject component as a property into object.
-mproto.inject = (componentName, klass) ->
+mproto.inject = (klass, componentName) ->
   Object.defineProperty klass.prototype, componentName,
+    get          :             -> app.get componentName
     set          : (component) -> app.set componentName, component
-    get          :         -> app.get componentName
     configurable : true
 
 mproto._runAfterCallbacks = (componentName) ->
@@ -214,5 +214,21 @@ mproto._runAfterCallbacks = (componentName) ->
 mproto._runBeforeCallbacks = (componentName) ->
   fn() for fn in list if list = @beforeCallbacks[componentName]
 
-# Setting global `app` variable.
-(global || window).app = new Micon()
+# # Configurations.
+
+# Environment.
+Object.defineProperty Micon.prototype, 'environment',
+  get          :               ->
+    @_environmentUsed = true
+    @_environment
+  set          : (environment) ->
+    throw new Error "can't set environment, itt's already used!" if @_environmentUsed
+    @_environment = environment
+  configurable : true
+
+# # Default configuration.
+app = new Micon()
+app.environment = 'development'
+
+# Exposing dependency injector as global `app` variable.
+(global || window).app = app

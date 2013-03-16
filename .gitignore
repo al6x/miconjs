@@ -2,4 +2,5 @@
 .DS_Store
 Thumbs.db
 tmp/*
+tmp.*
 node_modules
