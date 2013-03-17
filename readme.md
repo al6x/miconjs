@@ -28,8 +28,8 @@ console.log app.b
 # => a b
 ```
 
-Dependencies can be specified explicitly. The only difference with implicit approach
-is that explicit declaration will resolve circular dependencies (implicit approach
+Or explicitly. The only difference with implicit approach is that explicit
+declaration will resolve circular dependencies (implicit approach
 will fail).
 
 ``` CoffeeScript
@@ -61,16 +61,6 @@ app.component
 # => after initialization
 ```
 
-Autoloading components from directory, same as manually
-write `app.register 'something', -> require 'something'` for every file in
-directory.
-
-Provide `watch` option to reload on change.
-
-``` CoffeeScript
-app.register.directory directoryPath, watch: true
-```
-
 Scopes.
 
 ``` CoffeeScript
@@ -93,6 +83,19 @@ startFiberSomehow ->
   app.scope 'request', ->
   # => before
   # => after
+```
+
+Require files in directory, provide `onDemand: true` option to require components on
+demand.
+
+``` CoffeeScript
+# /app/controllers/SomeController.coffee
+# app.SomeController = 'some controller'
+
+app.requireDirectory '/absolutePath/app/controllers', onDemand: true
+
+console.log app.SomeController
+# => some controller
 ```
 
 Limitations.

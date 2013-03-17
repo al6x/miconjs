@@ -1,7 +1,7 @@
 {
   "name"         : "micon",
   "main"         : "./micon",
-  "version"      : "1.1.0",
+  "version"      : "1.2.0",
   "homepage"     : "http://github.com/alexeypetrushin/miconjs",
   "dependencies" : {
     "fibers" : "1.0.x"
@@ -16,5 +16,9 @@
     "name" : "Alexey Petrushin",
     "url"  : "http://petrush.in"
   },
-  "license"      : "MIT"
+  "license"      : "MIT",
+  "scripts" : {
+    "prepublish"  : "coffee -c micon.coffee",
+    "postpublish" : "rm micon.js"
+  }
 }
