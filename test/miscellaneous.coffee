@@ -51,6 +51,39 @@ describe "Fiber scope", ->
 
   it "should not activate scope without active fiber"
 
+  it "should resolve asynchronous initialization", (next) ->
+    app.register 'db', ->
+      process.nextTick sync.defer()
+      sync.await()
+      'some db'
+
+    activateFiber ->
+      expect(app.db).to.eql 'some db'
+      next()
+
+  it "should resolve asynchronous initialization in case of concurrent access", (next) ->
+    events = []
+    app.register 'db', ->
+      events.push 'initializing db'
+      process.nextTick sync.defer()
+      sync.await()
+      'some db'
+
+    done = (name) ->
+      done[name] = true
+      if done.a and done.b
+        expect(events).to.eql ['initializing db']
+        next()
+
+    activateFiber ->
+      expect(app.db).to.eql 'some db'
+      done 'a'
+
+    activateFiber ->
+      expect(app.db).to.eql 'some db'
+      done 'b'
+
+
   # it "should store components in container", ->
   #   app.register 'component', scope: 'custom', -> ['some component']
   #   [container, component] = [{}, null]
@@ -115,12 +148,13 @@ describe "Component callbacks", ->
     app.component = 'some component'
     expect(events).to.eql ['after']
 
-  it "should raise error if callback defined after component already created", ->
+  it "should fire after callback immediately if it's defined after component is created", ->
     app.register 'component', -> 'some component'
     app.component
-
-    expect(-> app.before 'component').to.throw /already created/
-    expect(-> app.after 'component').to.throw /already created/
+    events = []
+    app.before 'component', -> events.push 'before'
+    app.after 'component', -> events.push 'after'
+    expect(events).to.eql ['after']
 
   # it ":after with bang: false should execute callback if component already started and also register it as :after callback" do
   #   app.register(:the_component){"the_component"}

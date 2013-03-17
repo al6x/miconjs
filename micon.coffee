@@ -1,8 +1,9 @@
-# Fiber required for `fiber` and custom scopes, allowing to fall back and use limited
-# functionality when fibers not available.
 try
   Fiber = require 'fibers'
 catch err
+  # Fiber required for `fiber` and custom scopes, allowing to fall back and use limited
+  # functionality when fibers not available.
+  Fiber = {}
 
 # Helpers.
 isFunction = (o) -> typeof(o) == 'function'
@@ -76,7 +77,7 @@ Micon::get = (componentName) ->
     throw new Error "component '#{componentName}' not registered!"
 
   switch scopeName
-    when 'instance' then @_createComponent componentName
+    when 'instance' then @_createComponent componentName, {}
     when 'static'
       if component = @staticComponents[componentName] then component
       else @_createComponent(componentName, @staticComponents)
@@ -165,17 +166,39 @@ Micon::afterScope = (scopeName, callback) ->
   (@afterScopeCallbacks[scopeName] ?= []).push callback
 
 # Creates component.
+Micon.asynchronousInitializationTimeout = 1500
+Micon.asynchronousInitializationInterval = 5
 Micon::_createComponent = (componentName, container) ->
   [initializer, dependencies] = @initializers[componentName]
 
   unless initializer
     throw new Error "no initializer for '#{componentName}' component!"
 
+  # Current fiber needed to resolve concurrent acces in asynchronous initializations.
+  fiber.activeInitializations ?= {} if fiber = Fiber.current
+
   if componentName of @activeInitializations
-    throw new Error "component '#{componentName}' used before its initialization finished!"
+    if fiber and not (componentName of fiber.activeInitializations)
+      # Multiple fibers trying to get access to asynchronously initialized
+      # component. See `should resolve asynchronous initialization in
+      # case of concurrent access` for details.
+      #
+      # Waiting when initialization will be finished or timeout exeeded.
+      startTime = Date.now()
+      while Date.now() - startTime < Micon.asynchronousInitializationTimeout
+        setTimeout (-> fiber.run()), Micon.asynchronousInitializationInterval
+        Fiber.yield()
+        return component if component = container[componentName]
+      throw new Error \
+      "failed to resolve concurrent initialization of asynchronous '#{componentName}' component!"
+    else
+      throw new Error "component '#{componentName}' used before its initialization finished!"
 
   # Initialising dependencies.
   @get(name) for name in dependencies if dependencies
+
+  # Component may be initialized in dependencies, returning it.
+  return component if component = container[componentName]
 
   # Triggering before callbacks.
   @_runBeforeCallbacks componentName
@@ -183,20 +206,17 @@ Micon::_createComponent = (componentName, container) ->
   try
     # We need this check to detect and prevent component from been used before its initialization
     # finished.
-    @activeInitializations[componentName] = true
-
-    # We need to check container first, in complex cases (circullar dependency)
-    # the object already may be initialized.
-    # See "should allow to use circullar dependency in after callback".
-    return component if component = (container && container[componentName])
+    @activeInitializations[componentName] = {}
+    fiber.activeInitializations[componentName] = {} if fiber
 
     unless component = initializer()
       throw "initializer for component '#{componentName}' returns value evaluated to false!"
 
     # Storing created component in container.
-    container[componentName] = component if container
+    container[componentName] = component
   finally
     delete @activeInitializations[componentName]
+    delete fiber.activeInitializations[componentName] if fiber
 
   @_runAfterCallbacks componentName, component
   component
