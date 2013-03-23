@@ -1,8 +1,13 @@
 try
-  Fiber = require 'fibers'
+  try
+    # Trying synchronize first if it's installed.
+    Fiber = require('synchronize').Fiber
+  catch err
+    Fiber = require 'fibers'
 catch err
-  # Fiber required for `fiber` and custom scopes, allowing to fall back and use limited
-  # functionality when fibers not available.
+  # Fiber required for `fiber` and custom scopes. Allowing to fall
+  # back and use limited functionality when fibers not available.
+  console.warn "fibers not available!"
   Fiber = {}
 
 # Helpers.
@@ -222,11 +227,13 @@ Micon::_createComponent = (componentName, container) ->
   component
 
 # Inject component as a property into object.
-Micon::inject = (klass, componentName) ->
-  Object.defineProperty klass::, componentName,
-    get          :             -> app.get componentName
-    set          : (component) -> app.set componentName, component
-    configurable : true
+Micon::inject = (klass, componentNames...) ->
+  for componentName in componentNames
+    do (componentName) ->
+      Object.defineProperty klass::, componentName,
+        get          :             -> app.get componentName
+        set          : (component) -> app.set componentName, component
+        configurable : true
 
 Micon::_runAfterCallbacks = (componentName, component) ->
   fn(component) for fn in list if list = @afterCallbacks[componentName]
@@ -239,37 +246,51 @@ Micon::_runBeforeCallbacks = (componentName) ->
 # Require all files in directory, provide `onDemand: true` to load scripts in
 # form of `app.fileName` on demand.
 Micon.supportedExtensionsRe = /\.js$|\.coffee$/
+Micon.watchInterval         = 500
 Micon::requireDirectory = (directoryPath, options = {}) ->
   throw new Error "path '#{directoryPath}' should be absolute!" unless /^\//.test directoryPath
 
-  _eachScriptInDirectory = (directoryPath, fn) ->
-    fs = require 'fs'
-    fileNames = fs.readdirSync directoryPath
-    for fileName in fileNames when Micon.supportedExtensionsRe.test(fileName)
-      filePath = "#{directoryPath}/#{fileName}"
-      baseFileName = fileName.replace /\..+$/, ''
-      baseFilePath = "#{directoryPath}/#{baseFileName}"
-      fn baseFileName, baseFilePath, filePath
+  # Collecting scripts in directory.
+  fs = require 'fs'
+  fileNames = fs.readdirSync directoryPath
+  scripts = for fileName in fileNames when Micon.supportedExtensionsRe.test(fileName)
+    filePath = "#{directoryPath}/#{fileName}"
+    baseFileName = fileName.replace /\..+$/, ''
+    baseFilePath = "#{directoryPath}/#{baseFileName}"
+    [baseFileName, baseFilePath, filePath]
 
-  # Load scripts in directory when it accessed as `app.fileName`.
-  requireDirectoryOnDemand = ->
-    _eachScriptInDirectory directoryPath, (baseFileName, baseFilePath, filePath) ->
+  shouldBeDefined = (baseFileName) ->
+    app[baseFileName] || throw new Error "wrong definition of '#{baseFileName}'!"
+
+  if options.onDemand
+    # Load scripts in directory when it accessed as `app.fileName`.
+    _(scripts).each ([baseFileName, baseFilePath, filePath]) ->
       Object.defineProperty Micon::, baseFileName,
         get          :         ->
           delete Micon::[baseFileName]
-          require(baseFilePath)
-          @[baseFileName] || throw new Error "wrong definition of '#{baseFileName}'!"
+          require baseFilePath
+          shouldBeDefined baseFileName
+          @[baseFileName]
         set          : (value) ->
           delete Micon::[baseFileName]
           @[baseFileName] = value
         configurable : true
-
-  # Loading directory, same as manually require every file in directory.
-  requireDirectoryNow = ->
-    _eachScriptInDirectory directoryPath, (baseFileName, baseFilePath, filePath) ->
+  else
+    # Loading directory, same as manually require every file in directory.
+    _(scripts).each ([baseFileName, baseFilePath, filePath]) ->
       require baseFilePath
+      shouldBeDefined baseFileName
 
-  if options.onDemand then requireDirectoryOnDemand() else requireDirectoryNow()
+  # Watching in development environment.
+  if options.watch and app.environment == 'development'
+    _(scripts).each ([baseFileName, baseFilePath, filePath]) ->
+      fs.watchFile filePath, {interval: Micon.watchInterval}, (curr, prev) ->
+        return if curr.mtime == prev.mtime
+        console.info "  reloading app.#{baseFileName}"
+        delete app[baseFileName]
+        delete require.cache[filePath]
+        require baseFilePath
+        shouldBeDefined baseFileName
 
 # Environment.
 Object.defineProperty Micon::, 'environment',
@@ -280,6 +301,21 @@ Object.defineProperty Micon::, 'environment',
     throw new Error "can't set environment, itt's already used!" if @_environmentUsed
     @_environment = environment
   configurable : true
+
+# Adding events.
+try
+  EventEmitter = require('events').EventEmitter
+catch err
+  # EventEmitter required for events. Allowing to fall
+  # back and use limited functionality when fibers not available.
+  EventEmitter = ->
+
+# Mixing EventEmitter into Micon.
+Micon::[k] = v for k, v of EventEmitter.prototype
+Micon::initializeWithoutEventEmitter = Micon::initialize
+Micon::initialize = ->
+  @initializeWithoutEventEmitter.apply @, arguments
+  EventEmitter.apply @
 
 # # Default configuration.
 app = new Micon()

@@ -92,7 +92,7 @@ demand.
 # /app/controllers/SomeController.coffee
 # app.SomeController = 'some controller'
 
-app.requireDirectory '/absolutePath/app/controllers', onDemand: true
+app.requireDirectory '/absolutePath/app/controllers', onDemand: true, watch: true
 
 console.log app.SomeController
 # => some controller

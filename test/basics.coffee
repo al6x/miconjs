@@ -34,18 +34,18 @@ describe "Static scope", ->
 describe "Fiber scope", ->
   it "should activate scope", ->
     expect(app.hasScope('fiber')).to.eql false
-    activateFiber ->
+    sync.fiber ->
       expect(app.hasScope('fiber')).to.eql true
     expect(app.hasScope('fiber')).to.eql false
 
   it "should register and get component", ->
     app.register 'component', scope: 'fiber', -> 'some component'
-    activateFiber ->
+    sync.fiber ->
       expect(app.component).to.eql 'some component'
 
   it "should set component", ->
     app.register 'component', scope: 'fiber', -> 'some component'
-    activateFiber ->
+    sync.fiber ->
       expect(app.component).to.eql 'some component'
       app.component = 'another component'
       expect(app.component).to.eql 'another component'
@@ -53,20 +53,20 @@ describe "Fiber scope", ->
 describe "Custom scope", ->
   it "should activate scope", ->
     expect(app.hasScope('custom')).to.eql false
-    activateFiber ->
+    sync.fiber ->
       app.scope 'custom', ->
         expect(app.hasScope('custom')).to.eql true
     expect(app.hasScope('custom')).to.eql false
 
   it "should register and get component", ->
     app.register 'component', scope: 'custom', -> 'some component'
-    activateFiber ->
+    sync.fiber ->
       app.scope 'custom', ->
         expect(app.component).to.eql 'some component'
 
   it "should set component", ->
     app.register 'component', scope: 'custom', -> 'some component'
-    activateFiber ->
+    sync.fiber ->
       app.scope 'custom', ->
         expect(app.component).to.eql 'some component'
         app.component = 'another component'
@@ -91,6 +91,6 @@ describe "Scope callbacks", ->
     events = []
     app.beforeScope 'custom', -> events.push 'before'
     app.afterScope 'custom', -> events.push 'after'
-    activateFiber ->
+    sync.fiber ->
       app.scope 'custom', ->
     expect(events).to.eql ['before', 'after']

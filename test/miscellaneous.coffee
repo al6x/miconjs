@@ -2,19 +2,19 @@ require './helper'
 
 shared = (scope) ->
   it "should not allow to return null in component initializer", ->
-    activateFiber ->
+    sync.fiber ->
       app.scope scope, ->
         app.register 'component', scope: scope, -> null
         expect(-> app.component).to.throw /return null/
 
   it "should register component without initializer but not create it", ->
-    activateFiber ->
+    sync.fiber ->
       app.scope scope, ->
         app.register 'component', scope: scope
         expect(-> app.component).to.throw /no initializer/
 
   it "should not allow to set null as component", ->
-    activateFiber ->
+    sync.fiber ->
       app.scope scope, ->
         app.register 'component', scope: scope
         expect(-> app.component = null).to.throw /can't set .* component/
@@ -29,13 +29,13 @@ describe "Custom scope", ->
   shared 'custom'
 
   it "should not ativate scope twice", ->
-    activateFiber ->
+    sync.fiber ->
       app.scope 'custom', {}, ->
         expect(-> app.scope 'custom').to.throw /already active/
 
   it "shoud not get or set component if scope isn't active", ->
     app.register 'component', scope: 'custom', -> 'some component'
-    activateFiber ->
+    sync.fiber ->
       expect(-> app.component).to.throw /scope.*not created/
       expect(-> app.component = 'other component').to.throw /scope.*not created/
 
@@ -57,7 +57,7 @@ describe "Fiber scope", ->
       sync.await()
       'some db'
 
-    activateFiber ->
+    sync.fiber ->
       expect(app.db).to.eql 'some db'
       next()
 
@@ -75,11 +75,11 @@ describe "Fiber scope", ->
         expect(events).to.eql ['initializing db']
         next()
 
-    activateFiber ->
+    sync.fiber ->
       expect(app.db).to.eql 'some db'
       done 'a'
 
-    activateFiber ->
+    sync.fiber ->
       expect(app.db).to.eql 'some db'
       done 'b'
 
@@ -169,7 +169,7 @@ describe "Component callbacks", ->
 
 describe "Scope callbacks", ->
   it "should raise error if callback defined after scope already started", ->
-    activateFiber ->
+    sync.fiber ->
       app.scope 'custom', ->
         expect(-> app.beforeScope 'custom').to.throw /already created/
         expect(-> app.afterScope 'custom').to.throw /already created/
