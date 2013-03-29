@@ -12,9 +12,15 @@ catch err
 
 # Helpers.
 isFunction = (o) -> typeof(o) == 'function'
+extend     = (a, b) ->
+  a[k] = v for own k, v of b
+  a
+cloneOneLevelDeep = (o) ->
+  if Array.isArray o then (v for v in o)
+  else extend({}, o)
 
 # # Micon, dependency injector.
-Micon  = -> @initialize.apply(@, arguments); @
+Micon = -> @initialize.apply(@, arguments); @
 
 # Initialization.
 Micon::initialize = -> @clear()
@@ -24,7 +30,7 @@ Micon::scope = (scopeName, container..., callback) ->
   container = container[0] || {}
 
   throw new Error "no callback for scope '#{scopeName}'!" unless scopeName
-  return callback() if scopeName in ['static', 'instance']
+  return callback() if scopeName in ['global', 'application', 'instance']
   unless fiber = Fiber.current
     throw new Error "can't activate scope '#{scopeName}' without fiber!"
   fiber.activeScopes ?= {}
@@ -45,9 +51,10 @@ Micon::scope = (scopeName, container..., callback) ->
 # Check if scope created.
 Micon::hasScope = (scopeName) ->
   switch scopeName
-    when 'instance' then true
-    when 'static'   then true
-    when 'fiber'    then Fiber.current?
+    when 'application' then true
+    when 'global'      then true
+    when 'fiber'       then Fiber.current?
+    when 'instance'    then true
     else
       if activeScopes = Fiber.current?.activeScopes then scopeName of activeScopes
       else false
@@ -55,21 +62,45 @@ Micon::hasScope = (scopeName) ->
 # Clear everything.
 Micon::clear = ->
   [@registry, @initializers] = [{}, {}]
-  @staticComponents = {}
+  @applicationComponents = {}
   [@beforeCallbacks, @afterCallbacks] = [[], []]
   [@beforeScopeCallbacks, @afterScopeCallbacks] = [[], []]
+  # @injectedClasses = []
+Micon.clear = ->
   @activeInitializations = {}
+  @globalComponents      = {}
+Micon.clear()
+
+Micon::clone = () ->
+  clone = new Micon()
+
+  # Copying properties.
+  extend clone, @
+  clone.clear()
+
+  # Copying comlex objects.
+  complexObjects = ['registry', 'initializers', 'beforeCallbacks', 'afterCallbacks'
+  , 'beforeScopeCallbacks', 'afterScopeCallbacks'] # , 'injectedClasses'
+  clone[k] = cloneOneLevelDeep(@[k]) for k in complexObjects
+
+  # Creating getters for components.
+  clone.inject(clone, k) for k of clone.registry
+
+  # # Creating getters for classes.
+  # clone.injectClass(args...) for args in clone.injectedClasses
+  clone
 
 # Check if component instantiated.
 Micon::has = (componentName) ->
   return false unless scopeName = @registry[componentName]
 
   switch scopeName
-    when 'instance' then true
-    when 'static'   then componentName of @staticComponents
+    when 'application' then componentName of @applicationComponents
+    when 'global'      then componentName of Micon.globalComponents
     when 'fiber'
       if fiberComponents = Fiber.current?.fiberComponents then componentName of fiberComponents
       else false
+    when 'instance'    then true
     else
       # Custom scope.
       if (activeScopes = Fiber.current?.activeScopes) and (container = activeScopes[scopeName])
@@ -82,10 +113,12 @@ Micon::get = (componentName) ->
     throw new Error "component '#{componentName}' not registered!"
 
   switch scopeName
-    when 'instance' then @_createComponent componentName, {}
-    when 'static'
-      if component = @staticComponents[componentName] then component
-      else @_createComponent(componentName, @staticComponents)
+    when 'application'
+      if component = @applicationComponents[componentName] then component
+      else @_createComponent(componentName, @applicationComponents)
+    when 'global'
+      if component = Micon.globalComponents[componentName] then component
+      else @_createComponent(componentName, Micon.globalComponents)
     when 'fiber'
       # Fiber scope.
       unless fiber = Fiber.current
@@ -93,6 +126,7 @@ Micon::get = (componentName) ->
       fiberComponents = (fiber.fiberComponents ?= {})
       if component = fiberComponents[componentName] then component
       else @_createComponent(componentName, fiberComponents)
+    when 'instance' then @_createComponent componentName, {}
     else
       # Custom scope.
       unless fiber = Fiber.current
@@ -110,10 +144,12 @@ Micon::set = (componentName, component) ->
   throw new Error "can't set '#{componentName}' component as '#{component}'!" unless component
 
   switch scopeName
-    when 'instance'
-      throw new Error "component '#{componentName}' has 'instance' scope, it can't be set!"
-    when 'static'
-      @staticComponents[componentName] = component
+    when 'application'
+      @applicationComponents[componentName] = component
+      @_runAfterCallbacks componentName, component
+      component
+    when 'global'
+      Micon.globalComponents[componentName] = component
       @_runAfterCallbacks componentName, component
       component
     when 'fiber'
@@ -124,6 +160,8 @@ Micon::set = (componentName, component) ->
       fiberComponents[componentName] = component
       @_runAfterCallbacks componentName, component
       component
+    when 'instance'
+      throw new Error "component '#{componentName}' has 'instance' scope, it can't be set!"
     else
       # Custom scope.
       unless fiber = Fiber.current
@@ -140,11 +178,11 @@ Micon::register = (componentName, args...) ->
   initializer = args.pop() if args.length > 0 and isFunction(args[args.length - 1])
   options = args[0] || {}
 
-  @registry[componentName]     = options.scope || 'static'
+  @registry[componentName]     = options.scope || 'application'
   @initializers[componentName] = [initializer, options.dependencies]
 
   # Injecting component so it will be available as property.
-  @inject Micon, componentName
+  @inject @, componentName
 
 # Check if component registered.
 Micon::isRegistered = (componentName) -> componentName of @registry
@@ -182,7 +220,7 @@ Micon::_createComponent = (componentName, container) ->
   # Current fiber needed to resolve concurrent acces in asynchronous initializations.
   fiber.activeInitializations ?= {} if fiber = Fiber.current
 
-  if componentName of @activeInitializations
+  if componentName of Micon.activeInitializations
     if fiber and not (componentName of fiber.activeInitializations)
       # Multiple fibers trying to get access to asynchronously initialized
       # component. See `should resolve asynchronous initialization in
@@ -211,28 +249,33 @@ Micon::_createComponent = (componentName, container) ->
   try
     # We need this check to detect and prevent component from been used before its initialization
     # finished.
-    @activeInitializations[componentName] = {}
+    Micon.activeInitializations[componentName] = {}
     fiber.activeInitializations[componentName] = {} if fiber
 
+    # Creating component.
     unless component = initializer()
       throw "initializer for component '#{componentName}' returns value evaluated to false!"
+
+    # Setting link to self.
+    component.app = @
 
     # Storing created component in container.
     container[componentName] = component
   finally
-    delete @activeInitializations[componentName]
+    delete Micon.activeInitializations[componentName]
     delete fiber.activeInitializations[componentName] if fiber
 
   @_runAfterCallbacks componentName, component
   component
 
 # Inject component as a property into object.
-Micon::inject = (klass, componentNames...) ->
+Micon::inject = (object, componentNames...) ->
+  that = @
   for componentName in componentNames
     do (componentName) ->
-      Object.defineProperty klass::, componentName,
-        get          :             -> app.get componentName
-        set          : (component) -> app.set componentName, component
+      Object.defineProperty object, componentName,
+        get          :             -> that.get componentName
+        set          : (component) -> that.set componentName, component
         configurable : true
 
 Micon::_runAfterCallbacks = (componentName, component) ->
@@ -243,8 +286,8 @@ Micon::_runBeforeCallbacks = (componentName) ->
 
 # # Autoloding.
 
-# Require all files in directory, provide `onDemand: true` to load scripts in
-# form of `app.fileName` on demand.
+# Require all files in directory, provide `onDemand: true` to load scripts
+# on demand in form of `app.fileName`.
 Micon.supportedExtensionsRe = /\.js$|\.coffee$/
 Micon.watchInterval         = 500
 Micon::requireDirectory = (directoryPath, options = {}) ->
@@ -259,44 +302,47 @@ Micon::requireDirectory = (directoryPath, options = {}) ->
     baseFilePath = "#{directoryPath}/#{baseFileName}"
     [baseFileName, baseFilePath, filePath]
 
-  shouldBeDefined = (baseFileName) ->
-    app[baseFileName] || throw new Error "wrong definition of '#{baseFileName}'!"
+  # shouldBeDefined = (baseFileName) ->
+  #   app[baseFileName] || throw new Error "wrong definition of '#{baseFileName}'!"
+  eachScript = (fn) ->
+    fn.apply null, script for script in scripts
 
   if options.onDemand
     # Load scripts in directory when it accessed as `app.fileName`.
-    _(scripts).each ([baseFileName, baseFilePath, filePath]) ->
-      Object.defineProperty Micon::, baseFileName,
+    eachScript (baseFileName, baseFilePath, filePath) =>
+      # @injectedClasses.push [baseFileName, baseFilePath, filePath]
+      Object.defineProperty @, baseFileName,
         get          :         ->
-          delete Micon::[baseFileName]
+          delete @[baseFileName]
           require baseFilePath
-          shouldBeDefined baseFileName
+          # shouldBeDefined baseFileName
           @[baseFileName]
         set          : (value) ->
-          delete Micon::[baseFileName]
+          delete @[baseFileName]
           @[baseFileName] = value
         configurable : true
   else
     # Loading directory, same as manually require every file in directory.
-    _(scripts).each ([baseFileName, baseFilePath, filePath]) ->
+    eachScript (baseFileName, baseFilePath, filePath) ->
       require baseFilePath
-      shouldBeDefined baseFileName
+      # shouldBeDefined baseFileName
 
   # Watching in development environment.
-  if options.watch and app.environment == 'development'
-    _(scripts).each ([baseFileName, baseFilePath, filePath]) ->
-      fs.watchFile filePath, {interval: Micon.watchInterval}, (curr, prev) ->
+  if options.watch and @environment == 'development'
+    eachScript (baseFileName, baseFilePath, filePath) =>
+      fs.watchFile filePath, {interval: Micon.watchInterval}, (curr, prev) =>
         return if curr.mtime == prev.mtime
-        console.info "  reloading app.#{baseFileName}"
-        delete app[baseFileName]
+        console.info "  reloading #{baseFileName}"
+        delete @[baseFileName]
         delete require.cache[filePath]
         require baseFilePath
-        shouldBeDefined baseFileName
+        # shouldBeDefined baseFileName
 
 # Environment.
 Object.defineProperty Micon::, 'environment',
   get          :               ->
     @_environmentUsed = true
-    @_environment
+    @_environment || 'development'
   set          : (environment) ->
     throw new Error "can't set environment, itt's already used!" if @_environmentUsed
     @_environment = environment
@@ -311,15 +357,11 @@ catch err
   EventEmitter = ->
 
 # Mixing EventEmitter into Micon.
-Micon::[k] = v for k, v of EventEmitter.prototype
+extend Micon::, EventEmitter::
 Micon::initializeWithoutEventEmitter = Micon::initialize
 Micon::initialize = ->
   @initializeWithoutEventEmitter.apply @, arguments
   EventEmitter.apply @
 
-# # Default configuration.
-app = new Micon()
-app.environment = 'development'
-
-# Exposing dependency injector as global `app` variable.
-((global? && global) || window).app = app
+# Exporting.
+if module?.exports? then module.exports = Micon else window.Micon = Micon

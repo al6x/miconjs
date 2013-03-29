@@ -2,27 +2,36 @@ require './helper'
 
 shared = (scope) ->
   it "should not allow to return null in component initializer", ->
+    app.register 'component', scope: scope, -> null
     sync.fiber ->
       app.scope scope, ->
-        app.register 'component', scope: scope, -> null
         expect(-> app.component).to.throw /return null/
 
   it "should register component without initializer but not create it", ->
+    app.register 'component', scope: scope
     sync.fiber ->
       app.scope scope, ->
-        app.register 'component', scope: scope
         expect(-> app.component).to.throw /no initializer/
 
   it "should not allow to set null as component", ->
+    app.register 'component', scope: scope
     sync.fiber ->
       app.scope scope, ->
-        app.register 'component', scope: scope
         expect(-> app.component = null).to.throw /can't set .* component/
 
-describe "Instance scope", ->
+  it "should set link to self on component", ->
+    app.register 'component', scope: scope, -> {name: 'some component'}
+    sync.fiber ->
+      app.scope scope, ->
+        expect(app.component.app).to.equal app
+
+describe "Application scope", ->
   shared 'instance'
 
-describe "Static scope", ->
+describe "Global scope", ->
+  shared 'global'
+
+describe "Instance scope", ->
   shared 'instance'
 
 describe "Custom scope", ->
@@ -115,7 +124,8 @@ describe "Circullar dependencies", ->
   it "should allow to use circullar dependency in after callback for single component", ->
     app.register 'component', -> {name: 'component'}
     app.after 'component', -> app.component.altered = true
-    expect(app.component).to.eql {name: 'component', altered: true}
+    expect(app.component).to.have.property('name').to.eql 'component'
+    expect(app.component).to.have.property('altered').to.eql true
 
   it "should not allow circular dependency for multiple components", ->
     app.register 'environment', ->
@@ -173,3 +183,25 @@ describe "Scope callbacks", ->
       app.scope 'custom', ->
         expect(-> app.beforeScope 'custom').to.throw /already created/
         expect(-> app.afterScope 'custom').to.throw /already created/
+
+describe "Cloning", ->
+  it "should clone", ->
+    app.register 'component', -> {name: 'some component'}
+    expect(app.component).to.have.property('name').to.eql 'some component'
+    app2 = app.clone()
+    expect(app2.component).to.have.property('name').to.eql 'some component'
+    expect(app.component).to.not.equal app2.component
+
+  it "should be isolated", ->
+    app.register 'component', -> {name: 'some component'}
+    app2 = app.clone()
+    app2.register 'component', -> {name: 'another component'}
+    expect(app.component).to.have.property('name').to.eql 'some component'
+    expect(app2.component).to.have.property('name').to.eql 'another component'
+
+  it "should share global scope", ->
+    app.register 'component', scope: 'global', -> {name: 'some component'}
+    expect(app.component).to.have.property('name').to.eql 'some component'
+    app2 = app.clone()
+    expect(app2.component).to.have.property('name').to.eql 'some component'
+    expect(app.component).to.equal app2.component

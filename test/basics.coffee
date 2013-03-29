@@ -12,21 +12,28 @@ describe "Dependency Injector", ->
     app.b
     expect(events).to.eql ['a', 'b']
 
-describe "Instance scope", ->
+describe "Application scope", ->
   it "should register and get component", ->
-    app.register 'component', scope: 'instance', -> ['some component']
-    expect(app.component).to.eql ['some component']
-    expect(app.component).to.not.equal app.component
-
-describe "Static scope", ->
-  it "should register and get component", ->
-    app.register 'component', -> ['some component']
-    expect(app.component).to.eql ['some component']
+    app.register 'component', -> {name: 'some component'}
+    expect(app.component).to.have.property('name').to.eql 'some component'
     expect(app.component).to.equal app.component
 
   it "should set component", ->
     component = "some component"
     app.register 'component', -> 'some component'
+    expect(app.component).to.eql 'some component'
+    app.component = 'another component'
+    expect(app.component).to.eql 'another component'
+
+describe "Global scope", ->
+  it "should register and get component", ->
+    app.register 'component', scope: 'global', -> {name: 'some component'}
+    expect(app.component).to.have.property('name').to.eql 'some component'
+    expect(app.component).to.equal app.component
+
+  it "should set component", ->
+    component = "some component"
+    app.register 'component', scope: 'global', -> 'some component'
     expect(app.component).to.eql 'some component'
     app.component = 'another component'
     expect(app.component).to.eql 'another component'
@@ -39,9 +46,9 @@ describe "Fiber scope", ->
     expect(app.hasScope('fiber')).to.eql false
 
   it "should register and get component", ->
-    app.register 'component', scope: 'fiber', -> 'some component'
+    app.register 'component', scope: 'fiber', -> {name: 'some component'}
     sync.fiber ->
-      expect(app.component).to.eql 'some component'
+      expect(app.component).to.have.property('name').to.eql 'some component'
 
   it "should set component", ->
     app.register 'component', scope: 'fiber', -> 'some component'
@@ -49,6 +56,12 @@ describe "Fiber scope", ->
       expect(app.component).to.eql 'some component'
       app.component = 'another component'
       expect(app.component).to.eql 'another component'
+
+describe "Instance scope", ->
+  it "should register and get component", ->
+    app.register 'component', scope: 'instance', -> {name: 'some component'}
+    expect(app.component).to.have.property('name').to.eql 'some component'
+    expect(app.component).to.not.equal app.component
 
 describe "Custom scope", ->
   it "should activate scope", ->
@@ -59,10 +72,10 @@ describe "Custom scope", ->
     expect(app.hasScope('custom')).to.eql false
 
   it "should register and get component", ->
-    app.register 'component', scope: 'custom', -> 'some component'
+    app.register 'component', scope: 'custom', -> {name: 'some component'}
     sync.fiber ->
       app.scope 'custom', ->
-        expect(app.component).to.eql 'some component'
+        expect(app.component).to.have.property('name').to.eql 'some component'
 
   it "should set component", ->
     app.register 'component', scope: 'custom', -> 'some component'
