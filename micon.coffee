@@ -71,7 +71,7 @@ Micon.clear = ->
   @globalComponents      = {}
 Micon.clear()
 
-Micon::clone = () ->
+Micon::clone = (name = 'clone') ->
   clone = new Micon()
 
   # Copying properties.
@@ -88,6 +88,7 @@ Micon::clone = () ->
 
   # # Creating getters for classes.
   # clone.injectClass(args...) for args in clone.injectedClasses
+  clone.name = name
   clone
 
 # Check if component instantiated.
@@ -277,6 +278,9 @@ Micon::inject = (object, componentNames...) ->
         get          :             -> that.get componentName
         set          : (component) -> that.set componentName, component
         configurable : true
+
+Micon::inspect = -> @name || 'app'
+Micon::toString = -> @name || 'app'
 
 Micon::_runAfterCallbacks = (componentName, component) ->
   fn(component) for fn in list if list = @afterCallbacks[componentName]
