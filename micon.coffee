@@ -173,6 +173,30 @@ Micon::set = (componentName, component) ->
       @_runAfterCallbacks componentName, component
       component
 
+# Unset.
+Micon::unset = (componentName) ->
+  unless scopeName = @registry[componentName]
+    throw new Error "component '#{componentName}' not registered!"
+
+  switch scopeName
+    when 'application' then delete @applicationComponents[componentName]
+    when 'global'      then delete Micon.globalComponents[componentName]
+    when 'fiber'
+      # Fiber scope.
+      unless fiber = Fiber.current
+        throw new Error "can't get component '#{componentName}', no active fiber!"
+      fiberComponents = (fiber.fiberComponents ?= {})
+      delete fiberComponents[componentName]
+    when 'instance'
+      throw new Error "component '#{componentName}' has 'instance' scope, it can't be unset!"
+    else
+      # Custom scope.
+      unless fiber = Fiber.current
+        throw new Error "can't get component '#{componentName}', no active fiber!"
+      unless container = fiber.activeScopes?[scopeName]
+        throw new Error "can't get component '#{componentName}', scope '#{scopeName}' not created!"
+      delete container[componentName]
+
 # Register component.
 Micon::register = (componentName, args...) ->
   throw new Error "can't use '#{componentName}' as component name!" unless componentName
