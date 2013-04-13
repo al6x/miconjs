@@ -23,7 +23,9 @@ cloneOneLevelDeep = (o) ->
 Micon = -> @initialize.apply(@, arguments); @
 
 # Initialization.
-Micon::initialize = -> @clear()
+Micon::initialize = ->
+  @name = 'app'
+  @clear()
 
 # Creates scope, provided `callback` will be executed within that scope.
 Micon::scope = (scopeName, container..., callback) ->
@@ -143,6 +145,9 @@ Micon::set = (componentName, component) ->
   unless scopeName = @registry[componentName]
     throw new Error "component '#{componentName}' not registered!"
   throw new Error "can't set '#{componentName}' component as '#{component}'!" unless component
+
+  # Setting link to self.
+  component.app = @
 
   switch scopeName
     when 'application'
