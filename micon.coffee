@@ -340,25 +340,30 @@ Micon::requireDirectory = (directoryPath, options = {}) ->
   eachScript = (fn) ->
     fn.apply null, script for script in scripts
 
-  if options.onDemand
-    # Load scripts in directory when it accessed as `app.fileName`.
-    eachScript (baseFileName, baseFilePath, filePath) =>
-      # @injectedClasses.push [baseFileName, baseFilePath, filePath]
-      Object.defineProperty @, baseFileName,
-        get          :         ->
-          delete @[baseFileName]
-          require baseFilePath
-          # shouldBeDefined baseFileName
-          @[baseFileName]
-        set          : (value) ->
-          delete @[baseFileName]
-          @[baseFileName] = value
-        configurable : true
-  else
-    # Loading directory, same as manually require every file in directory.
-    eachScript (baseFileName, baseFilePath, filePath) ->
+  eachScript (baseFileName, baseFilePath, filePath) =>
+    @register baseFileName, =>
       require baseFilePath
-      # shouldBeDefined baseFileName
+      @applicationComponents[baseFileName]
+
+  # if options.onDemand
+  #   # Load scripts in directory when it accessed as `app.fileName`.
+  #   eachScript (baseFileName, baseFilePath, filePath) =>
+  #     # @injectedClasses.push [baseFileName, baseFilePath, filePath]
+  #     Object.defineProperty @, baseFileName,
+  #       get          :         ->
+  #         delete @[baseFileName]
+  #         require baseFilePath
+  #         # shouldBeDefined baseFileName
+  #         @[baseFileName]
+  #       set          : (value) ->
+  #         delete @[baseFileName]
+  #         @[baseFileName] = value
+  #       configurable : true
+  # else
+  #   # Loading directory, same as manually require every file in directory.
+  #   eachScript (baseFileName, baseFilePath, filePath) ->
+  #     require baseFilePath
+  #     # shouldBeDefined baseFileName
 
   # Watching in development environment.
   if options.watch and @environment == 'development'
@@ -366,7 +371,7 @@ Micon::requireDirectory = (directoryPath, options = {}) ->
       fs.watchFile filePath, {interval: Micon.watchInterval}, (curr, prev) =>
         return if curr.mtime == prev.mtime
         console.info "  reloading #{baseFileName}"
-        delete @[baseFileName]
+        @unset baseFileName #delete @[baseFileName]
         delete require.cache[filePath]
         require baseFilePath
         # shouldBeDefined baseFileName

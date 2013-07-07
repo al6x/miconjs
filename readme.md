@@ -85,14 +85,13 @@ startFiberSomehow ->
   # => after
 ```
 
-Require files in directory, provide `onDemand: true` option to require components on
-demand.
+Require files in directory, provide `watch: true` option to watch for changes and reload.
 
 ``` CoffeeScript
 # /app/controllers/SomeController.coffee
 # app.SomeController = 'some controller'
 
-app.requireDirectory '/absolutePath/app/controllers', onDemand: true, watch: true
+app.requireDirectory '/absolutePath/app/controllers', watch: true
 
 console.log app.SomeController
 # => some controller
