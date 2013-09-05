@@ -284,7 +284,8 @@ Micon::_createComponent = (componentName, container) ->
 
     # Creating component.
     unless component = initializer()
-      throw "initializer for component '#{componentName}' returns value evaluated to false!"
+      throw new Error \
+      "initializer for component '#{componentName}' returns value evaluated to false!"
 
     # Setting link to self.
     component.app = @
@@ -330,51 +331,32 @@ Micon::requireDirectory = (directoryPath, options = {}) ->
   fs = require 'fs'
   fileNames = fs.readdirSync directoryPath
   scripts = for fileName in fileNames when Micon.supportedExtensionsRe.test(fileName)
+    # Skipping file called `app` because it creates `app` getter
+    # and sometimes it interfere with global `app` variable.
+    continue if /^app\./.test fileName
     filePath = "#{directoryPath}/#{fileName}"
-    baseFileName = fileName.replace /\..+$/, ''
-    baseFilePath = "#{directoryPath}/#{baseFileName}"
-    [baseFileName, baseFilePath, filePath]
+    @requireFile filePath, options
 
-  # shouldBeDefined = (baseFileName) ->
-  #   app[baseFileName] || throw new Error "wrong definition of '#{baseFileName}'!"
-  eachScript = (fn) ->
-    fn.apply null, script for script in scripts
+Micon::requireFile = (filePath, options) ->
+  throw new Error "path '#{filePath}' should be absolute!" unless /^\//.test filePath
 
-  eachScript (baseFileName, baseFilePath, filePath) =>
-    @register baseFileName, =>
-      require baseFilePath
-      @applicationComponents[baseFileName]
+  fileName     = _(filePath.split('/')).last()
+  baseFileName = fileName.replace /\..+$/, ''
+  baseFilePath = filePath.replace /\..+$/, ''
 
-  # if options.onDemand
-  #   # Load scripts in directory when it accessed as `app.fileName`.
-  #   eachScript (baseFileName, baseFilePath, filePath) =>
-  #     # @injectedClasses.push [baseFileName, baseFilePath, filePath]
-  #     Object.defineProperty @, baseFileName,
-  #       get          :         ->
-  #         delete @[baseFileName]
-  #         require baseFilePath
-  #         # shouldBeDefined baseFileName
-  #         @[baseFileName]
-  #       set          : (value) ->
-  #         delete @[baseFileName]
-  #         @[baseFileName] = value
-  #       configurable : true
-  # else
-  #   # Loading directory, same as manually require every file in directory.
-  #   eachScript (baseFileName, baseFilePath, filePath) ->
-  #     require baseFilePath
-  #     # shouldBeDefined baseFileName
+  @register baseFileName, =>
+    require baseFilePath
+    @applicationComponents[baseFileName]
 
   # Watching in development environment.
   if options.watch and @environment == 'development'
-    eachScript (baseFileName, baseFilePath, filePath) =>
-      fs.watchFile filePath, {interval: Micon.watchInterval}, (curr, prev) =>
-        return if curr.mtime == prev.mtime
-        console.info "  reloading #{baseFileName}"
-        @unset baseFileName #delete @[baseFileName]
-        delete require.cache[filePath]
-        require baseFilePath
-        # shouldBeDefined baseFileName
+    fs = require 'fs'
+    fs.watchFile filePath, {interval: Micon.watchInterval}, (curr, prev) =>
+      return if curr.mtime == prev.mtime
+      console.info "  reloading #{baseFileName}"
+      @unset baseFileName
+      delete require.cache[filePath]
+      require baseFilePath
 
 # Environment.
 Object.defineProperty Micon::, 'environment',
