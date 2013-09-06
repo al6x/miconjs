@@ -361,8 +361,8 @@ Micon::requireFile = (filePath, options) ->
 # Environment.
 Object.defineProperty Micon::, 'environment',
   get          :               ->
-    @_environmentUsed = true
-    @_environment || 'development'
+    @_environmentUsed ?= true
+    @_environment ?= process.env.environment || 'development'
   set          : (environment) ->
     throw new Error "can't set environment, itt's already used!" if @_environmentUsed
     @_environment = environment
