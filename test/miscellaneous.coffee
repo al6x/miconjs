@@ -5,7 +5,7 @@ shared = (scope) ->
     app.register 'component', scope: scope, -> null
     sync.fiber ->
       app.scope scope, ->
-        expect(-> app.component).to.throw /return null/
+        expect(-> app.component).to.throw /null, false or empty string/
 
   it "should register component without initializer but not create it", ->
     app.register 'component', scope: scope

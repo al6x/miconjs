@@ -285,7 +285,7 @@ Micon::_createComponent = (componentName, container) ->
     # Creating component.
     unless component = initializer()
       throw new Error \
-      "initializer for component '#{componentName}' returns value evaluated to false!"
+      "initializer for component '#{componentName}' returns null, false or empty string!"
 
     # Setting link to self.
     component.app = @
