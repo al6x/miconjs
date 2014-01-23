@@ -340,7 +340,8 @@ Micon::requireDirectory = (directoryPath, options = {}) ->
 Micon::requireFile = (filePath, options) ->
   throw new Error "path '#{filePath}' should be absolute!" unless /^\//.test filePath
 
-  fileName     = _(filePath.split('/')).last()
+  fileParts    = filePath.split('/')
+  fileName     = fileParts[fileParts.length - 1]
   baseFileName = fileName.replace /\..+$/, ''
   baseFilePath = filePath.replace /\..+$/, ''
 
