@@ -326,6 +326,7 @@ Micon.supportedExtensionsRe = /\.js$|\.coffee$/
 Micon.watchInterval         = 500
 Micon::requireDirectory = (directoryPath, options = {}) ->
   throw new Error "path '#{directoryPath}' should be absolute!" unless /^\//.test directoryPath
+  directoryPath = require('path').normalize directoryPath
 
   # Collecting scripts in directory.
   fs = require 'fs'
@@ -342,12 +343,17 @@ Micon::requireFile = (filePath, options) ->
 
   fileParts    = filePath.split('/')
   fileName     = fileParts[fileParts.length - 1]
-  baseFileName = fileName.replace /\..+$/, ''
-  baseFilePath = filePath.replace /\..+$/, ''
+  baseFileName = fileName.replace /\.[^\.]+$/, ''
+  baseFilePath = filePath.replace /\.[^\.]+$/, ''
 
-  @register baseFileName, =>
+  _this = @
+  _this.register baseFileName, ->
+    # After first usage owerriding `register` without `require`.
+    _this.register baseFileName, ->
+      _this.applicationComponents[baseFileName]
+
     require baseFilePath
-    @applicationComponents[baseFileName]
+    _this.applicationComponents[baseFileName]
 
   # Watching in development environment.
   if options.watch and @environment == 'development'

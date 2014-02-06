@@ -205,3 +205,8 @@ describe "Cloning", ->
     app2 = app.clone()
     expect(app2.component).to.have.property('name').to.eql 'some component'
     expect(app.component).to.equal app2.component
+
+describe "Robustness", ->
+  it "should register arbitrary keys as component names", ->
+    app.register 'site.com', -> 'some site'
+    expect(app.get('site.com')).to.eql 'some site'
